@@ -1,4 +1,8 @@
-# Website
+# React Native Thực Chiến
+
+**[👉 Bấm vào đây để xem toàn bộ bài học (Trang web chính thức)](https://thayduy.github.io/react-native-thuc-chien/)**
+
+---
 
 This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
