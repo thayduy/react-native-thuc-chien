@@ -77,7 +77,7 @@ Trong thực tế đi làm, Đội ngũ Mobile và Đội ngũ Backend thường
 Hơn nữa, ở Chương 8, việc ta để lộ API Key của Gemini AI ngay trong mã nguồn Mobile (Frontend) là một **LỖI BẢO MẬT NGHIÊM TRỌNG**. Kẻ gian sẽ dịch ngược file APK, cướp API Key và xài ké tiền của bạn.
 
 **Giải pháp:** Ta cần dựng một máy chủ (Backend Server) làm lớp khiên bảo vệ ở giữa.
-[Mobile App] <----> [Backend Server (NestJS)] <----> [Database / Google AI]
+`[Mobile App] <----> [Backend Server (NestJS)] <----> [Database / Google AI]`
 Mobile App sẽ không bao giờ biết API Key là gì, nó chỉ gọi lên Backend, Backend sẽ dùng API Key (lưu an toàn trên Server) gọi sang Google AI rồi trả kết quả về cho Mobile.
 
 ---
