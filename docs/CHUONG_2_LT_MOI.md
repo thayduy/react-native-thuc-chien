@@ -24,7 +24,8 @@ Sau khi hoàn thành chương này, học viên sẽ:
 - ✅ Thành thạo **Core Components phổ biến**: View, Text, Image, TextInput, ScrollView, Pressable, FlatList, SectionList, ActivityIndicator, Modal, Switch, Alert, SafeAreaView
 - ✅ Biết khi nào dùng ScrollView vs FlatList vs SectionList
 - ✅ Thành thạo `useState` / `useEffect` (tránh Memory Leak, Closure Trap)
-- ✅ Gọi API cơ bản bằng **Fetch** và **Axios** (nhập môn — sâu hơn ở Ch.6)
+- ✅ Định nghĩa được **API** (cửa + luật để hai chương trình nói chuyện); phân biệt API với `fetch`/Axios, database, màn hình
+- ✅ Hiểu HTTP/JSON, **3 trạng thái UI** (loading / data / error), gọi API bằng **Fetch** và **Axios** (nhập môn — Interceptor/React Query ở Ch.6)
 - ✅ Dựng cấu trúc thư mục + Path Aliases cho ShopAI
 - ✅ **Thực chiến:** HomeScreen demo đủ core components + fetch thử dữ liệu mẫu
 
@@ -39,7 +40,7 @@ Sau khi hoàn thành chương này, học viên sẽ:
 2.4 Style & StyleSheet (cầm tay chỉ việc + bản vẽ UI)
 2.5 useState / useEffect
 2.6 Core Components ĐẦY ĐỦ   ← đề cương 2.1
-2.7 Fetch & Axios nhập môn   ← đề cương 2.2
+2.7 Fetch & Axios nhập môn (HTTP, JSON, 3 trạng thái UI, file chạy được)  ← đề cương 2.2
 2.8 Clean Architecture + Path Alias
 Sprint 2: Cấu trúc src/ + HomeScreen + fetch
 ```
@@ -1971,80 +1972,834 @@ export default function App() {
 | FlashList, Reanimated | Ch.4 |
 | Navigation screens | Ch.5 |
 
-**Bài tập trước Sprint 2:** Tạo `src/screens/demos/`, chạy lần lượt `TextDemo` → `TextInputDemo` → `FlatListDemo` → `ModalDemo`. Trong `App.tsx` tạm `return <ModalDemo />`.
+**Bài tập trước Sprint 2:** Tạo `src/screens/demos/`, chạy lần lượt `TextDemo` → `TextInputDemo` → `FlatListDemo` → `ModalDemo` → **`FetchDemo`** (Phần 2.7). Trong `App.tsx` tạm `return <FetchDemo />` — thấy spinner, rồi list 5 bài; tắt wifi bấm Thử lại phải hiện lỗi.
 
 ---
 
-## 🌐 PHẦN 2.7: FETCH API & AXIOS NHẬP MÔN (Đề cương 2.2)
+## 🌐 PHẦN 2.7: FETCH API & AXIOS NHẬP MÔN (Đề cương 2.2) — CẦM TAY CHỈ VIỆC
 
-> Mục tiêu Chương 2: **biết gọi API và đưa JSON ra màn hình**. Caching, React Query, phân trang chuẩn → Chương 6. Backend NestJS → Chương 9.
+> Mục tiêu Chương 2: **hiểu app lấy dữ liệu từ đâu**, **gọi được API**, và **đưa JSON lên màn hình** (có loading + lỗi). Caching, React Query, Interceptor gắn Token, phân trang chuẩn → **Chương 6**. Backend NestJS → **Chương 9**. Phần này **không** nhảy cóc sang những thứ đó.
 
-### 2.7.1. Fetch API (có sẵn, không cần cài)
+> [!NOTE]
+> **Vì sao API lại nằm ở Chương 2 — có bị nhảy cóc không?**
+>
+> Đề cương chính thức **Chương 2 mục 2.2** = Fetch/Axios *nhập môn*. Đề cương **Chương 6 mục 6.1** = Fetch/Axios *sâu* (instance, Interceptor, Token, phân trang). Hai mục **không trùng**: spiral — gặp lần 1 cho đủ “list lấy từ mạng”, gặp lần 2 cho Production.
+>
+> **Phù hợp Chương 2 vì:** vừa học `FlatList` + `useEffect`. List hardcode là đồ chơi; `useEffect` sinh ra đúng để gọi mạng. Sprint 2 bắt HomeScreen **Fetch** list — không có 2.7 thì thực hành không bám lý thuyết.
+>
+> **Chưa phù hợp (cố tình để sau):** Interceptor, React Query, Zod, phân trang, Backend. Axios ở đây chỉ mức *nhận diện* (`get` / `res.data` / khác Fetch chỗ nào). Sprint 2 **không bắt buộc cài Axios**.
+
+### Cách đọc phần này (bắt buộc theo thứ tự)
+
+Người mới thất bại ở API không phải vì “không nhớ cú pháp `fetch`”, mà vì **chưa biết API là gì** rồi mới tới luồng gọi mạng. Đọc theo 6 tầng:
+
+1. **API là gì** (định nghĩa — đọc trước, chưa gõ code)
+2. **Vì sao app phải gọi mạng** (cửa hàng ↔ kho hàng)
+3. **HTTP + JSON** (ngôn ngữ hai bên nói chuyện)
+4. **Ba trạng thái UI** (Đang tải / Có dữ liệu / Lỗi) — thiếu 1 trong 3 là bài chưa xong
+5. **Fetch** — có sẵn, file chạy được, giải thích từng dòng
+6. **Axios** — thư viện, so sánh từng điểm với Fetch, file chạy được
+
+> [!IMPORTANT]
+> Đừng copy 2 dòng `fetch` rồi mong list hiện ra. API **không chạy trong JSX**. Nó chạy trong `useEffect` (Phần 2.5), kết quả phải `setState`, màn hình mới vẽ lại.
+
+---
+
+### 2.7.0. API là gì? — đọc trước khi gặp chữ `fetch`
+
+Chương 1–2 dạy **vẽ màn hình**. Phần này dạy app **xin dữ liệu từ máy khác**. Trước khi gõ `fetch`, phải biết mình đang xin **cái gì**, từ **ai**.
+
+#### 1) Định nghĩa (tiếng Việt thường, thuộc 1 câu)
+
+**API** (đọc: *ây-pi-ai*) là **cách hai chương trình nói chuyện với nhau theo luật đã thống nhất**.
+
+Trong ShopAI:
+
+- Chương trình A = **app trên điện thoại** (HomeScreen, giỏ hàng).
+- Chương trình B = **máy chủ** ở Internet (nơi cất danh sách sản phẩm, tài khoản, đơn hàng).
+- Luật thống nhất = “xin bằng URL + GET/POST, nhận về JSON”.
+
+Bạn **không** vào tận database của shop. Bạn đứng ở **quầy**, đọc **thực đơn**, gọi đúng món, nhận đồ đã gói sẵn. **API chính là quầy + thực đơn đó.**
+
+```
+  Bạn (người)          App (code của bạn)         Server (máy người khác)
+  gọi món      ≈       gọi API                    bếp / kho
+  xem thực đơn ≈       xem danh sách endpoint     luật được phép gọi
+  nhận đĩa ăn  ≈       nhận JSON                  hàng đã đóng gói
+```
+
+#### 2) Ba chữ trong từ API — đừng học vẹt
+
+| Chữ | Tiếng Anh | Ý nghĩa với người mới |
+|-----|-----------|------------------------|
+| **A** | Application | Một phần mềm. Ở đây: app ShopAI **hoặc** server. Cả hai đều là “ứng dụng”. |
+| **P** | Programming | Việc nói chuyện do **code** làm, không phải người bấm tay trên web. |
+| **I** | Interface | **Mặt tiếp xúc** — cửa ra vào, không phải toàn bộ căn nhà. |
+
+Ghép lại: **giao diện để chương trình này gọi chương trình kia.**  
+Chữ *interface* ở đây **không** phải màn hình UI (`View`, `Text`). Đó là “cửa giao tiếp”, giống ổ cắm điện: cắm đúng hình, mới có điện.
+
+#### 3) API không phải là… (tránh nhầm 4 thứ)
+
+| Không phải | Vì sao |
+|------------|--------|
+| Không phải màn hình Home | Home chỉ **vẽ**. API là **nguồn hàng** Home xin về rồi mới vẽ. |
+| Không phải database | Database là kho trong bếp. API là **quầy** — app không được xộc vào bếp. |
+| Không phải thư viện `fetch` / Axios | `fetch` và Axios là **cách điện thoại gửi lời xin**. API là **bên kia** (server) + luật. Thiếu server thì `fetch` chẳng xin được gì. |
+| Không phải Internet | Internet là **đường**. API là **địa chỉ quầy trên đường đó** (một URL cụ thể). |
+
+Câu nhớ: **`fetch` = miệng nói. API = quầy nghe + trả hàng. JSON = hộp hàng.**
+
+#### 4) Loại API khóa này dùng: Web API / HTTP API
+
+Từ “API” ngoài đời còn nhiều kiểu (API hệ điều hành, API camera của RN…). **Từ đây đến hết khóa**, khi giáo trình viết “gọi API” là mặc định:
+
+> **HTTP API** — app gửi yêu cầu qua mạng tới một **URL**, server trả **JSON**.
+
+Đó là loại dùng cho ShopAI (list sản phẩm, đăng nhập, đặt hàng). Chương 9 sẽ **viết** quầy này bằng NestJS. Chương 2 chỉ **gọi** quầy có sẵn.
+
+**Endpoint** (điểm cuối / “món trên thực đơn”) = **một URL + một việc**.
+
+| Endpoint (ví dụ) | Việc |
+|------------------|------|
+| `GET /posts` | Cho xem danh sách bài viết |
+| `GET /posts/3` | Cho xem **một** bài số 3 |
+| `POST /posts` | Nhận bài mới gửi lên |
+
+Cùng một server, nhiều endpoint = nhiều món. Gọi sai món (sai URL) → 404, giống gọi món không có trên thực đơn.
+
+#### 5) Client và Server — hai vai, đừng đảo
+
+| Vai | Là ai trong ShopAI | Việc |
+|-----|-------------------|------|
+| **Client** (khách) | App React Native trên điện thoại | Xin, nhận, **vẽ** lên màn hình |
+| **Server** (phục vụ) | Máy chạy API (JSONPlaceholder bây giờ; NestJS ở Ch.9) | Giữ dữ liệu, quyết định cho / không cho |
+
+`fetch` chạy **phía Client**. File `.tsx` của bạn là Client. Bạn chưa viết Server ở Chương 2.
+
+#### 6) Vì sao app không tự “có sẵn” 500 sản phẩm trong code?
+
+Màn hình Home **không chứa** catalog trong file `.tsx`. File component chỉ biết **cách vẽ một dòng**. Dữ liệu thật:
+
+- đổi mỗi ngày (giá, hết hàng) → không thể hardcode rồi phát app lại mỗi lần;
+- dùng chung nhiều điện thoại → phải nằm **một chỗ** trên Server;
+- cần đăng nhập / phân quyền → Server mới giữ được, không nhét mật khẩu vào app.
+
+Hãy tưởng tượng luồng:
+
+```
+┌──────────────────┐                         ┌────────────────────────┐
+│  Điện thoại bạn  │                         │  Server (kho hàng)     │
+│  = CỬA HÀNG      │                         │  = KHO TRUNG TÂM       │
+│  = Client        │   1) Xin danh sách      │  = nơi API sống        │
+│                  │      = GỌI API          │                        │
+│  HomeScreen      │ ──────────────────────► │  endpoint /posts       │
+│  chỉ biết VẼ     │      GET (Request)      │                        │
+│  kệ hàng         │                         │                        │
+│                  │   2) Đây là JSON        │  Trả về mảng sản phẩm  │
+│  FlatList hiện   │ ◄────────────────────── │  (Response)            │
+│  đúng số món nhận│                         │                        │
+└──────────────────┘                         └────────────────────────┘
+```
+
+**Bước thực tế ngay bây giờ (chưa cần code):** mở trình duyệt máy tính, dán:
+
+```
+https://jsonplaceholder.typicode.com/posts?_limit=5
+```
+
+Bạn sẽ thấy một mảng chữ `[{ "id": 1, "title": "...", ... }, ...]`. Đó **chính là API đang trả hàng**. App Sprint 2 sẽ xin **đúng URL này**, rồi `FlatList` vẽ từng `title`. Khóa này dùng [JSONPlaceholder](https://jsonplaceholder.typicode.com) làm **API giả miễn phí** — không cần viết Backend.
+
+> Tóm một dòng: **API = cửa + luật để app xin dữ liệu từ server. `fetch`/Axios = tay đi xin. JSON = hàng nhận về.** Đến đây mới sang HTTP (mục 2.7.1).
+
+---
+
+### 2.7.1. HTTP cho người mới — 4 thứ phải thuộc trước khi gõ `fetch`
+
+Gọi API = gửi một **HTTP Request** và chờ một **HTTP Response**. Bốn mảnh:
+
+#### 1) URL — địa chỉ quầy
+
+| Mảnh | Ví dụ | Ý nghĩa |
+|------|--------|---------|
+| Gốc (origin) | `https://jsonplaceholder.typicode.com` | Máy chủ nào |
+| Đường dẫn (path) | `/posts` | Tài nguyên nào (bài viết / sản phẩm) |
+| Query | `?_limit=5` | Lọc / giới hạn — sau dấu `?` |
+
+Ghép lại: `https://jsonplaceholder.typicode.com/posts?_limit=5` = “Cho tôi **tối đa 5 bài viết**”.
+
+#### 2) Method — bạn muốn LÀM GÌ
+
+Ở nhập môn chỉ cần 2 verb:
+
+| Method | Ý định đời thường | ShopAI |
+|--------|-------------------|--------|
+| **GET** | “Cho tôi xem” — **không** gửi thân hàng lớn, **không** làm thay đổi kho | Tải list sản phẩm, chi tiết 1 món |
+| **POST** | “Nhận giúp tôi cái này” — gửi **body** (JSON) lên server | Đăng ký, đặt hàng, thêm giỏ *(sẽ dùng nhiều từ Ch.6–9)* |
+
+> Chương 2 **chỉ bắt buộc thành thạo GET**. POST minh họa ở Axios để bạn nhận ra cú pháp, chưa bắt buộc dùng trong Sprint 2.
+
+#### 3) Status code — server trả lời “ổn hay hỏng”
+
+`fetch` **không tự ném lỗi** khi server bảo 404/500. Nó vẫn “thành công về mặt mạng” và đưa cho bạn một object `Response`. **Bạn phải tự xem mã trạng thái.**
+
+| Mã | Ý nghĩa người mới | App nên làm gì |
+|----|-------------------|----------------|
+| **200** | OK — có dữ liệu | `res.json()` rồi `setItems` |
+| **201** | Tạo mới thành công (thường gặp ở POST) | Đọc body nếu server trả object mới |
+| **400** | Client gửi sai (thiếu field, sai kiểu) | Hiện lỗi, đừng đổ list rỗng im lặng |
+| **401 / 403** | Chưa đăng nhập / không đủ quyền | Chương 6–9 (Token) |
+| **404** | URL sai hoặc tài nguyên không tồn tại | Báo “Không tìm thấy” |
+| **500** | Server gãy | Báo “Lỗi máy chủ, thử lại” |
+| *(mạng đứt)* | Không có Response nào cả | `catch` — “Không có Internet” |
+
+**Quy tắc vàng:** mã **2xx** = ổn. Còn lại = thất bại nghiệp vụ. Trong Fetch ta viết:
 
 ```tsx
-async function loadProducts() {
-  try {
-    const res = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=5');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json(); // bắt buộc await — body là stream
-    return data;
-  } catch (e) {
-    console.error('Lỗi mạng:', e);
-    throw e;
-  }
+if (!res.ok) throw new Error(`HTTP ${res.status}`);
+```
+
+`res.ok` là `true` khi mã thuộc khoảng 200–299.
+
+#### 4) JSON — ngôn ngữ đóng gói hàng
+
+Server **không** trả component React. Server trả **chữ** theo chuẩn JSON (JavaScript Object Notation):
+
+```json
+[
+  { "id": 1, "title": "Tai nghe Pro", "body": "..." },
+  { "id": 2, "title": "Ốp lưng", "body": "..." }
+]
+```
+
+- `[ ]` = mảng (list).
+- `{ }` = một object (một món).
+- Key **phải** bọc trong `"nháy kép"` — đây là JSON, không phải object JS thoải mái.
+
+App nhận chuỗi → **parse** thành mảng JS → `setState` → FlatList vẽ.
+
+Với Fetch: bạn tự gọi `await res.json()`.  
+Với Axios: thư viện parse sẵn, lấy `response.data`.
+
+---
+
+### 2.7.2. Ba trạng thái UI — thiếu 1 trong 3 là bài chưa xong
+
+Gọi API **không phải** “chạy xong là có list”. Có **khoảng chờ** (mạng chậm 200ms–vài giây) và **có thể thất bại** (wifi đứt, URL sai).
+
+Màn hình phải vẽ **đúng 1 trong 3 cảnh** — không chồng lên nhau:
+
+```
+  ĐANG TẢI (loading)              CÓ DỮ LIỆU (success)             LỖI (error)
+┌─────────────────────┐        ┌─────────────────────┐        ┌─────────────────────┐
+│                     │        │  #1  Tai nghe Pro   │        │  ⚠ Không tải được   │
+│         ⟳           │        │  #2  Ốp lưng        │        │                     │
+│     Đang tải...     │        │  #3  Sạc 65W        │        │    [ Thử lại ]      │
+│                     │        │                     │        │                     │
+└─────────────────────┘        └─────────────────────┘        └─────────────────────┘
+   ActivityIndicator              FlatList + data[]              Text + nút gọi lại
+```
+
+**Ba biến State tương ứng** (nhớ thuộc — Sprint 2 dùng đúng bộ này):
+
+| State | Kiểu gợi ý | Khi nào `true` / có giá trị |
+|-------|------------|------------------------------|
+| `loading` | `boolean` | Đang chờ mạng — hiện vòng xoay, **che** list |
+| `items` / `posts` | `mảng` | Request thành công — đưa vào `FlatList data={...}` |
+| `error` | `string \| null` | Request thất bại — hiện câu tiếng Việt, **không** giả vờ list rỗng |
+
+Luồng thời gian (đọc từ trên xuống):
+
+```
+User mở màn hình
+    │
+    ▼
+useEffect (Mount, mảng [])  ──►  setLoading(true), setError(null)
+    │
+    ▼
+fetch / axios.get  ────────────  ĐI RA INTERNET (JS Thread không bị “đứng”, vì await)
+    │
+    ├── thành công ──► setItems(data) ──► setLoading(false) ──► vẽ FlatList
+    │
+    └── thất bại   ──► setError('...') ──► setLoading(false) ──► vẽ ô lỗi + Thử lại
+```
+
+> Nếu bạn chỉ `setItems` mà **quên** `loading` / `error`: lúc mới vào màn hình sẽ hiện “Chưa có sản phẩm” (ListEmpty) dù thực ra **đang tải** — người dùng tưởng app hỏng.
+
+---
+
+### 2.7.3. Fetch API — cầm tay chỉ việc
+
+#### 1) Là gì?
+
+`fetch` là hàm **có sẵn** trên React Native (và trình duyệt). Không cài npm. Đưa URL vào, nhận về một **Promise** (lời hứa: “tôi sẽ trả kết quả sau”).
+
+```tsx
+const res = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=5');
+```
+
+#### 2) `async` / `await` — vì sao không viết “xong liền”?
+
+Gọi mạng **chậm hơn** vẽ UI hàng nghìn lần. Nếu bắt JS **đứng chờ** wifi, màn hình đóng băng.
+
+**Nhà hàng:** bạn gọi món (`fetch`) → không đứng chết tại quầy → làm việc khác → khi đồ ăn ra (`await` xong) mới ăn (`res.json()` + `setState`).
+
+- Hàm có `await` bên trong **bắt buộc** khai báo `async`.
+- `await` chỉ dùng được trong hàm `async` — **không** viết `await fetch(...)` trần ở thân component (ngoài hàm).
+
+```tsx
+// ❌ SAI — thân component không phải chỗ await
+function HomeScreen() {
+  const res = await fetch('...'); // SyntaxError
+}
+
+// ✅ ĐÚNG — nhét vào hàm async, gọi từ useEffect hoặc từ onPress
+async function loadPosts() {
+  const res = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=5');
+  // ...
 }
 ```
 
-**Trong component:**
-```tsx
-const [items, setItems] = useState([]);
-const [loading, setLoading] = useState(true);
+#### 3) Giải phẫu từng dòng — đừng nuốt chửng
 
+```tsx
+async function loadPosts() {
+  // ① Gửi GET. Mặc định fetch = GET nếu không ghi method.
+  const res = await fetch(
+    'https://jsonplaceholder.typicode.com/posts?_limit=5',
+  );
+
+  // ② BẮT BUỘC. fetch coi 404/500 vẫn là “có Response” — không tự nhảy vào catch.
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  // ③ Body là luồng (stream), chưa phải mảng. Phải đọc hết rồi parse JSON.
+  //    Thiếu await → data là Promise, FlatList vẽ rác / crash.
+  const data = await res.json();
+
+  return data; // mảng JS: [{ id, title, body }, ...]
+}
+```
+
+**Ba bẫy dòng ② và ③:**
+
+| Sai | Hệ quả |
+|-----|--------|
+| Quên `if (!res.ok)` | URL sai vẫn đi tiếp, `res.json()` ra HTML/`{}`, list trống khó hiểu |
+| Quên `await` trước `res.json()` | `data` là Promise, không phải mảng |
+| Gọi `res.json()` hai lần | Lần 2 lỗi — body stream chỉ đọc **một lần** |
+
+#### 4) Vì sao PHẢI gọi trong `useEffect` — không gọi lúc render?
+
+```tsx
+// ❌ CẤM — gọi fetch ngay trong thân hàm component
+function HomeScreen() {
+  fetch('https://...'); // mỗi lần re-render (setState) là GỌI LẠI API
+  // → vòng lặp: fetch → setState → render → fetch → ... app đơ / DDoS chính mình
+}
+
+// ✅ ĐÚNG — Mount 1 lần (mảng phụ thuộc rỗng, Phần 2.5)
+useEffect(() => {
+  loadPosts();
+}, []);
+```
+
+`[]` = “chạy **đúng 1 lần** khi màn hình vừa xuất hiện”.  
+Muốn bấm nút **Làm mới** thì gọi `loadPosts()` trong `onPress` — đó là chủ đích, không phải vòng lặp render.
+
+#### 5) Cờ `alive` — tránh setState khi màn hình đã chết (Memory Leak, Phần 2.5)
+
+User mở Home → fetch còn đang bay → user **thoát** màn hình (Unmount) → vài giây sau Response về. Nếu vẫn `setItems(...)` trên component đã chết: cảnh báo `Can't perform a React state update on an unmounted component`, nặng hơn là rò rỉ.
+
+```tsx
 useEffect(() => {
   let alive = true;
+
   (async () => {
     try {
-      const data = await loadProducts();
-      if (alive) setItems(data);
+      const data = await loadPosts();
+      if (alive) setItems(data);      // chỉ set khi màn còn gắn
+    } catch {
+      if (alive) setError('Không tải được dữ liệu.');
     } finally {
       if (alive) setLoading(false);
     }
   })();
-  return () => { alive = false; }; // tránh setState sau unmount
+
+  return () => {
+    alive = false; // Cleanup: đánh dấu “đã Unmount”
+  };
 }, []);
 ```
 
-### 2.7.2. Axios (thư viện — tiện interceptor, timeout)
+`(async () => { ... })()` gọi là **IIFE** (Immediately Invoked Function Expression): vì callback của `useEffect` **không** được khai báo `async` trực tiếp (React không await hàm cleanup đúng cách). Cách dễ đọc hơn — **Sprint 2 dùng cách này**: viết `async function load()` ở ngoài, rồi `useEffect(() => { load(); return () => { ... }; }, [])`.
+
+#### 6) File đầy đủ — copy chạy được (`FetchDemo.tsx`)
+
+Tạo `src/screens/demos/FetchDemo.tsx`, tạm `return <FetchDemo />` trong `App.tsx` để thấy **đủ 3 trạng thái**.
+
+```tsx
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
+
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+async function loadPosts(): Promise<Post[]> {
+  const res = await fetch(
+    'https://jsonplaceholder.typicode.com/posts?_limit=5',
+  );
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export default function FetchDemo() {
+  const [items, setItems] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await loadPosts();
+      setItems(data);
+    } catch {
+      setError('Không tải được dữ liệu. Kiểm tra mạng hoặc URL.');
+    } finally {
+      setLoading(false); // thành công hay thất bại cũng phải tắt vòng xoay
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const data = await loadPosts();
+        if (alive) setItems(data);
+      } catch {
+        if (alive) setError('Không tải được dữ liệu. Kiểm tra mạng hoặc URL.');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#FF4D4F" />
+        <Text style={styles.hint}>Đang tải bài viết...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+        <Pressable onPress={load} style={styles.btn}>
+          <Text style={styles.btnText}>Thử lại</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={items}
+      keyExtractor={(item) => String(item.id)}
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={
+        <Text style={styles.header}>Fetch Demo — JSONPlaceholder</Text>
+      }
+      renderItem={({ item }) => (
+        <View style={styles.card}>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.body} numberOfLines={2}>
+            {item.body}
+          </Text>
+        </View>
+      )}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  hint: { marginTop: 12, color: '#7F8C8D' },
+  error: { color: '#FF4D4F', textAlign: 'center', marginBottom: 16 },
+  btn: {
+    backgroundColor: '#FF4D4F',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  btnText: { color: '#fff', fontWeight: '700' },
+  list: { padding: 16 },
+  header: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: '#2C3E50' },
+  card: {
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  title: { fontWeight: '700', color: '#2C3E50', marginBottom: 6 },
+  body: { color: '#7F8C8D' },
+});
+```
+
+#### 7) Giải thích từng khối trong file
+
+| Khối | Việc nó làm |
+|------|-------------|
+| `type Post` | Nói cho TypeScript: mỗi phần tử JSON có `id`, `title`, `body`. Sai key thì editor gạch đỏ. |
+| `loadPosts()` | **Chỉ** nói chuyện với mạng. Không `setState`. Dễ test, dễ đưa sang `src/services/` (Sprint 2). |
+| `useState` × 3 | Bộ ba loading / data / error |
+| `useEffect(..., [])` | Mount → gọi API một lần |
+| `if (loading) return ...` | **Return sớm**: đang tải thì không vẽ list rỗng |
+| `if (error) return ...` | Return sớm cảnh lỗi + nút `load` (lần này không cần cờ alive nếu user còn đứng trên màn) |
+| `FlatList` | `data={items}` — **không** hardcode mảng trong file |
+| `finally { setLoading(false) }` | Tắt vòng xoay **dù** thắng hay thua. Quên `finally` → spinner xoay mãi. |
+
+#### 8) Lỗi hay gặp (Fetch)
+
+| Sai | Hiện tượng | Sửa |
+|-----|------------|-----|
+| Gọi `fetch` trong thân component | API bắn liên tục, app giật | Đưa vào `useEffect` hoặc `onPress` |
+| Quên `if (!res.ok)` | 404 mà list trống, không vào `catch` | `if (!res.ok) throw ...` |
+| Quên `await res.json()` | Crash / data không phải mảng | Luôn `await` |
+| `useEffect(async () => { ... })` | Cảnh báo React, cleanup sai | IIFE hoặc hàm `load` riêng |
+| Không có `loading` | Flash “list rỗng” rồi mới có data | `ActivityIndicator` khi `loading` |
+| HTTP vs HTTPS / URL gõ sai | `Network request failed` | Copy URL dán trình duyệt trước |
+| Android HTTP thường (không SSL) | Bị chặn cleartext | Dùng `https://` (JSONPlaceholder đã là https) |
+
+#### 9) ShopAI dùng Fetch chỗ nào?
+
+Sprint 2: file `src/services/productApi.ts` bọc `fetchSamplePosts()`, `HomeScreen` gọi trong `useEffect` + nút Làm mới. **Đừng** nhét URL dài vào JSX.
+
+---
+
+### 2.7.4. Axios — cầm tay chỉ việc
+
+#### 1) Là gì? Khác Fetch ở chỗ nào trong đầu người mới?
+
+Axios là **thư viện npm** (không có sẵn). Bên dưới nó vẫn đi Internet như `fetch`, nhưng **bọc** cho đỡ khổ:
+
+| Việc người mới hay quên | Fetch | Axios |
+|-------------------------|-------|-------|
+| Parse JSON | Tự `await res.json()` | Tự parse → lấy `response.data` |
+| 404/500 có nhảy `catch` không? | **Không** (phải `!res.ok`) | **Có** — ném lỗi, vào `catch` |
+| Timeout (mạng treo 30 giây) | Tự viết `AbortController` | `timeout: 10000` sẵn |
+| Gắn Token vào **mọi** request | Tự viết wrapper | **Interceptor** — dạy kỹ **Chương 6** |
+| `baseURL` một chỗ | Tự nối chuỗi URL | `axios.create({ baseURL })` |
+
+**Chương 2:** biết cài, biết `get` / `post`, biết `response.data`, biết vì sao Production thích Axios.  
+**Chương 6:** instance dùng chung + Interceptor Token + React Query.
+
+#### 2) Cài đặt (một lần trong thư mục dự án)
 
 ```bash
 npm install axios
 ```
+
+Chờ xong, `package.json` có `"axios": "..."`. Thiếu bước này thì `import axios from 'axios'` báo đỏ `Unable to resolve module`.
+
+#### 3) Cùng một GET — đặt hai đoạn code cạnh nhau
+
+**Fetch (bạn vừa học):**
+
+```tsx
+const res = await fetch(
+  'https://jsonplaceholder.typicode.com/posts?_limit=5',
+);
+if (!res.ok) throw new Error(`HTTP ${res.status}`);
+const data = await res.json();
+// data = mảng posts
+```
+
+**Axios tương đương:**
+
+```tsx
+import axios from 'axios';
+
+const res = await axios.get(
+  'https://jsonplaceholder.typicode.com/posts',
+  { params: { _limit: 5 } }, // Axios tự biến thành ?_limit=5
+);
+const data = res.data;
+// data = mảng posts (đã parse). Không cần res.json().
+```
+
+Nhìn hình luồng:
+
+```
+FETCH                                 AXIOS
+fetch(url)                            axios.get(url, { params })
+   │                                     │
+   ▼                                     ▼
+Response (chưa phải JSON)             Đã parse JSON
+   │                                     │
+   ├─ res.ok ?                           ├─ mã 2xx → res.data
+   ├─ await res.json()                   └─ mã 4xx/5xx → NÉM lỗi → catch
+   └─ data
+```
+
+`params: { _limit: 5 }` sạch hơn tự nối `'...?_limit=' + 5` (tránh lỗi encode).
+
+#### 4) `axios.create` — một “cổng” dùng chung (nhập môn)
+
+Khi 10 màn hình đều gõ nguyên `https://jsonplaceholder.typicode.com/...`, đổi domain là sửa 10 file. Tạo **một instance**:
 
 ```tsx
 import axios from 'axios';
 
 const api = axios.create({
   baseURL: 'https://jsonplaceholder.typicode.com',
+  timeout: 10000, // quá 10 giây chưa trả → ném lỗi (Fetch mặc định không có)
+});
+
+// Chỉ còn path, không lặp domain
+const res = await api.get('/posts', { params: { _limit: 5 } });
+```
+
+> Chương 6 sẽ đưa instance này vào `src/api/axiosClient.ts` và gắn Interceptor. Chương 2 **chưa** làm Interceptor — hiểu `baseURL` + `timeout` là đủ.
+
+#### 5) POST — gửi JSON lên server (nhận diện cú pháp)
+
+GET = xin xem. POST = **gửi object** trong body:
+
+```tsx
+const res = await api.post('/posts', {
+  title: 'ShopAI',
+  body: 'Xin chào kho hàng',
+  userId: 1,
+});
+// JSONPlaceholder giả lập tạo mới, thường trả object kèm id
+console.log(res.data);
+```
+
+Fetch tương đương dài hơn (bạn **không bắt buộc** thuộc lòng ở Ch.2, chỉ để thấy Axios gọn hơn):
+
+```tsx
+const res = await fetch('https://jsonplaceholder.typicode.com/posts', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ title: 'ShopAI', body: 'hello', userId: 1 }),
+});
+```
+
+Axios tự set header JSON + `JSON.stringify`. Ít chỗ quên.
+
+#### 6) File đầy đủ — `AxiosDemo.tsx`
+
+Cài axios xong mới chạy file này. Tạm trỏ `App.tsx` sang `AxiosDemo` để so với `FetchDemo`: **UI ba trạng thái giống nhau**, khác mỗi hàm gọi mạng.
+
+```tsx
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
+import axios from 'axios';
+
+type Post = { id: number; title: string; body: string };
+
+const api = axios.create({
+  baseURL: 'https://jsonplaceholder.typicode.com',
   timeout: 10000,
 });
 
-// GET
-const { data } = await api.get('/posts', { params: { _limit: 5 } });
+async function loadPosts(): Promise<Post[]> {
+  const res = await api.get<Post[]>('/posts', { params: { _limit: 5 } });
+  return res.data; // không cần res.json(), không cần if (!res.ok)
+}
 
-// POST
-await api.post('/posts', { title: 'ShopAI', body: 'hello', userId: 1 });
+export default function AxiosDemo() {
+  const [items, setItems] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await loadPosts();
+      setItems(data);
+    } catch (e) {
+      // Axios nhét chi tiết vào e.response (nếu server có trả lời)
+      setError('Không tải được dữ liệu. Kiểm tra mạng hoặc URL.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await loadPosts();
+        if (alive) setItems(data);
+      } catch {
+        if (alive) setError('Không tải được dữ liệu. Kiểm tra mạng hoặc URL.');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#FF4D4F" />
+        <Text style={styles.hint}>Đang tải (Axios)...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{error}</Text>
+        <Pressable onPress={load} style={styles.btn}>
+          <Text style={styles.btnText}>Thử lại</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={items}
+      keyExtractor={(item) => String(item.id)}
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={
+        <Text style={styles.header}>Axios Demo — cùng API với Fetch</Text>
+      }
+      renderItem={({ item }) => (
+        <View style={styles.card}>
+          <Text style={styles.title}>{item.title}</Text>
+        </View>
+      )}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  hint: { marginTop: 12, color: '#7F8C8D' },
+  error: { color: '#FF4D4F', textAlign: 'center', marginBottom: 16 },
+  btn: {
+    backgroundColor: '#FF4D4F',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  btnText: { color: '#fff', fontWeight: '700' },
+  list: { padding: 16 },
+  header: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: '#2C3E50' },
+  card: {
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  title: { fontWeight: '700', color: '#2C3E50' },
+});
 ```
 
-| | Fetch | Axios |
-|---|-------|-------|
-| Có sẵn? | Có | Cài thêm |
-| JSON | Tự `res.json()` | Tự parse → `response.data` |
-| Timeout | Tự viết / AbortController | Có sẵn |
-| Interceptor (gắn Token) | Tự viết | Có sẵn — rất hữu ích Ch.6–9 |
+#### 7) Lỗi Axios người mới hay dính
 
-**ShopAI:** Sprint 2 dùng **Fetch** cho đơn giản; từ Chương 6 ưu tiên Axios + React Query.
+| Sai | Hiện tượng | Sửa |
+|-----|------------|-----|
+| Quên `npm install axios` | `Unable to resolve module 'axios'` | Cài rồi restart Metro |
+| Lấy `res` làm list | FlatList không ra dòng | List nằm ở **`res.data`** |
+| `api.get('/posts?_limit=5')` vừa path vừa query rối | Vẫn chạy nhưng khó đọc | Dùng `{ params: { _limit: 5 } }` |
+| `catch (e)` rồi `e.message` tiếng Anh | User thấy `timeout of 10000ms exceeded` | Đổi thành câu tiếng Việt cố định (như file trên) |
+| Nhầm `axios.get` với `fetch` — viết `res.json()` | `res.json is not a function` | Axios: `res.data` |
+
+Đọc mã HTTP khi lỗi (hữu ích lúc debug, chưa bắt buộc thuộc):
+
+```tsx
+} catch (e) {
+  if (axios.isAxiosError(e)) {
+    console.log('status', e.response?.status); // 404, 500, ...
+    console.log('body', e.response?.data);
+  }
+  setError('Không tải được dữ liệu.');
+}
+```
+
+#### 8) Bảng chọn: lúc này dùng gì?
+
+| Câu hỏi | Fetch | Axios |
+|---------|-------|-------|
+| Có sẵn, không cài? | ✅ | ❌ phải `npm install` |
+| Bài nhập môn / Sprint 2 | ✅ **Dùng cái này** | Có thể thử demo, không bắt buộc |
+| Tự parse JSON + tự check `ok` | Bạn phải nhớ | Thư viện lo |
+| Timeout, `baseURL`, params sạch | Tự viết | ✅ |
+| Gắn Token mọi request, hủy 401 | Tự viết cực dài | Interceptor — **Ch.6** |
+| Cache, kéo refresh, phân trang | Không có | Vẫn chưa đủ → **React Query Ch.6** |
+
+**ShopAI:** Sprint 2 = **Fetch** (đúng đề cương 2.2.1, ít phụ thuộc). Từ Chương 6 = **Axios instance + React Query** (đề cương 6.1–6.2). Học Fetch trước để hiểu “mạng thật sự xảy ra gì”; Axios không thay thế kiến thức đó — nó chỉ bớt việc lặp.
 
 ---
+
+### 2.7.5. Quy trình 7 bước khi bạn tự viết một màn “có API” (ghi nhớ)
+
+In vào đầu trước khi làm Sprint 2:
+
+1. **Xác định URL + GET hay POST.** Dán URL GET lên trình duyệt — thấy JSON mới viết code.
+2. **Tách hàm mạng** (`loadPosts` / `fetchSamplePosts`) ra khỏi JSX — sau này nằm `src/services/`.
+3. **Khai báo 3 state:** `loading` / `data` / `error`.
+4. **`useEffect(..., [])`** gọi lần đầu khi Mount. Nút Làm mới gọi lại hàm đó.
+5. **Cleanup `alive`** (hoặc `useRef` như Sprint 2) — đừng `setState` sau Unmount.
+6. **Return sớm UI:** loading → spinner; error → chữ + Thử lại; mới tới FlatList.
+7. **`keyExtractor`** dùng `id` thật của JSON (`String(item.id)`), đừng dùng index nếu list sẽ lọc/sắp xếp.
+
+```
+JSON trên Server
+      │  fetch / axios
+      ▼
+  hàm services/
+      │  return mảng JS
+      ▼
+  setItems(data)
+      │  React re-render
+      ▼
+  FlatList data={items}  →  từng ô trên màn hình
+```
+
+> [!TIP]
+> Xong phần này, bạn **chưa** cần React Query. Nếu list Sprint 2 hiện ra từ mạng, có spinner lúc chờ và có câu lỗi khi tắt wifi — bạn đã đạt đề cương **2.2**. Kéo refresh / trang 2 / Token để dành Chương 6.
+
+---
+
 
 ## 🏛️ PHẦN 2.8: KIẾN TRÚC THƯ MỤC ENTERPRISE (CLEAN ARCHITECTURE)
 
@@ -2494,8 +3249,8 @@ git push origin main
 | 2.1.2 Button / Touchable / Pressable | Có (ưu tiên Pressable) |
 | 2.1.3 FlatList, SectionList | Có |
 | *(bổ sung thực chiến)* | ActivityIndicator, Modal, Switch, Alert, SafeAreaView |
-| 2.2.1 Fetch | Có + Sprint |
-| 2.2.2 Axios | Có (lý thuyết; cài khi cần) |
+| 2.2.1 Fetch | Có — HTTP/JSON, 3 trạng thái UI, file `FetchDemo` chạy được + Sprint |
+| 2.2.2 Axios | Có — `axios.create`, `res.data`, file `AxiosDemo`, bảng so sánh; Interceptor để Ch.6 |
 | *(Hooks nền)* | `useState` / `useEffect` — Phần 2.5 |
 
 **Checklist:**
@@ -2503,7 +3258,9 @@ git push origin main
 - [ ] Viết được Functional Component + JSX
 - [ ] Phân biệt ScrollView vs FlatList vs SectionList
 - [ ] Viết TextInput controlled (`value` + `onChangeText`)
-- [ ] Fetch JSON và đổ vào FlatList
+- [ ] Nói được API là gì (quầy + luật), khác `fetch`/database/màn hình
+- [ ] Phân biệt GET/POST, `res.ok` vs Axios `res.data`, đủ 3 trạng thái UI
+- [ ] Fetch JSON và đổ vào FlatList (có spinner + lỗi + Thử lại)
 - [ ] Path alias `@screens` / `@services` chạy được
 - [ ] Hiểu Bridge/JSI ở mức “vì sao list dài cần ảo hóa”
 

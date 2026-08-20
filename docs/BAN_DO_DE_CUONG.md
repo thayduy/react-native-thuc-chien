@@ -50,8 +50,8 @@ Tài liệu này giúp giảng viên và học viên biết: **mỗi mục đề
 | 2.1.1 | View, Text, Image, TextInput, ScrollView | `CHUONG_2_LT_MOI.md` — Phần 2.5 |
 | 2.1.2 | Button / Touchable / Pressable | `CHUONG_2` — mục 2.5.6 |
 | 2.1.3 | FlatList, SectionList (cơ bản) | `CHUONG_2` — Phần 2.5; đào sâu Virtualization + `FlashList` ở `CHUONG_4` |
-| 2.2.1 | Fetch API | `CHUONG_2` — Phần 2.6 (lý thuyết + Sprint) |
-| 2.2.2 | Axios (nhập môn) | `CHUONG_2` — Phần 2.6 (lý thuyết); nâng cấp **Instance + Interceptor** ở `CHUONG_6` (Phần 6.6) |
+| 2.2.1 | Fetch API | `CHUONG_2` — Phần 2.7 (lý thuyết + Sprint) |
+| 2.2.2 | Axios (nhập môn) | `CHUONG_2` — Phần 2.7 (nhận diện, Sprint không bắt buộc cài); nâng cấp **Instance + Interceptor** ở `CHUONG_6` (Phần 6.6) |
 
 ### Đề cương Chương 3 — Hooks
 | Mục | Nội dung | Nơi học |
